@@ -1,4 +1,4 @@
-// app/stage10.tsx
+// app/stage10.tsx - Updated with authentication
 
 import React, { useState } from 'react';
 import {
@@ -12,8 +12,8 @@ import {
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useOnboarding } from './context/OnboardingContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// TODO: replace with your server's LAN IP
 const SERVER_URL = 'http://192.168.1.206:8000';
 
 export default function Stage10() {
@@ -58,7 +58,15 @@ export default function Stage10() {
         return;
       }
 
-      // 3) Build payload
+      // 3) Get auth token
+      const token = await AsyncStorage.getItem('auth_token');
+      if (!token) {
+        Alert.alert('שגיאה', 'נדרש לבצע התחברות מחדש');
+        router.replace('/');
+        return;
+      }
+
+      // 4) Build payload
       const payload = {
         full_name: fullName,
         dob,
@@ -76,21 +84,31 @@ export default function Stage10() {
         tiktok,
       };
 
-      // 4) Create profile on server
+      // 5) Create profile on server with auth
       const response = await fetch(`${SERVER_URL}/profiles`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
+      
       if (!response.ok) {
+        if (response.status === 401) {
+          Alert.alert('שגיאה', 'נדרש לבצע התחברות מחדש');
+          router.replace('/');
+          return;
+        }
         throw new Error(`Server error: ${response.status}`);
       }
+      
       const json = await response.json();
 
-      // 5) Save returned profile ID for location updates
+      // 6) Save returned profile ID for location updates
       setProfileId(json._id);
 
-      // 6) Navigate to home or map
+      // 7) Navigate to home or map
       router.replace('/stage11');
     } catch (error) {
       console.error(error);

@@ -1,6 +1,7 @@
-// app/tabs/index.tsx
 
-import React, { useRef, useState } from "react";
+// app/(tabs)/index.tsx - Updated with authentication flow
+
+import React, { useRef, useState, useEffect } from "react";
 import {
   SafeAreaView,
   View,
@@ -17,16 +18,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 I18nManager.forceRTL(true);
 
 const { width, height } = Dimensions.get("window");
 const PHOTO_SIZE = width * 0.28;
 const IMAGE_AREA_HEIGHT = PHOTO_SIZE * 2.1 + 20;
+const SERVER_URL = 'http://192.168.1.206:8000'; // Update this
 
 const positions = [
   { top: 12, left: 16, rotate: "-8deg" },
@@ -92,6 +96,7 @@ const pages = [
 export default function Onboarding() {
   const router = useRouter();
   const [page, setPage] = useState(0);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const [showModal, setShowModal] = useState(false);
@@ -100,6 +105,37 @@ export default function Onboarding() {
   const [phone, setPhone] = useState("");
   const [codeDigits, setCodeDigits] = useState<string[]>(Array(6).fill(""));
   const codeRefs = useRef<(TextInput | null)[]>([]);
+
+  useEffect(() => {
+    checkAuthentication();
+  }, []);
+
+  const checkAuthentication = async () => {
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      if (token) {
+        // Verify token with server
+        const response = await fetch(`${SERVER_URL}/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.is_profile_complete) {
+            router.replace('/MapScreen');
+          } else {
+            router.replace('/stage1');
+          }
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+    }
+    setCheckingAuth(false);
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -160,10 +196,27 @@ export default function Onboarding() {
     else openModal();
   };
 
-  const confirmCode = () => {
-    // TODO: actually verify the OTP…
-    router.push('/stage1');
+  const confirmCode = async () => {
+    // TODO: Verify OTP with server here
+    // For now, save phone and navigate to email stage
+    await AsyncStorage.setItem('temp_phone', phone);
+    router.push('../emailStage');
   };
+
+  if (checkingAuth) {
+    return (
+      <LinearGradient
+        colors={["#FFA726", "#8E24AA"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.container}
+      >
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      </LinearGradient>
+    );
+  }
 
   const activeDot = 2 - page;
 
@@ -442,5 +495,10 @@ const styles = StyleSheet.create({
   linkText: {
     color: "#8E24AA",
     fontSize: 14,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
